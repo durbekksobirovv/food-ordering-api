@@ -104,3 +104,17 @@ const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server http://localhost:${PORT} da yoniq`);
 });
+// --- RANGNI OLISH ---
+app.get('/api/settings', (req, res) => {
+    const db = readDB();
+    // Agar settings bo'lmasa, default rang qaytaramiz
+    res.json(db.settings || { bgColor: "#f3f4f6" });
+});
+
+// --- RANGNI SAQLASH ---
+app.post('/api/settings', (req, res) => {
+    const db = readDB();
+    db.settings = { ...db.settings, ...req.body };
+    writeDB(db);
+    res.json({ message: "Sozlamalar saqlandi", settings: db.settings });
+});
