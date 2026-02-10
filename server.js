@@ -9,6 +9,7 @@ const DB_FILE = "./db.json";
 app.use(cors());
 app.use(bodyParser.json({ limit: "50mb" }));
 
+// Ma'lumotlarni o'qish/yozish funksiyalari
 const readDB = () => {
   if (!fs.existsSync(DB_FILE)) {
     const initialData = {
@@ -26,7 +27,7 @@ const readDB = () => {
 const writeDB = (data) =>
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
-// --- TAOM VA SOZLAMALAR API (O'ZGARISSIZ) ---
+// --- 1. MAHSULOTLAR API ---
 app.get("/api/foods", (req, res) => res.json(readDB().foods));
 app.post("/api/foods", (req, res) => {
   const db = readDB();
@@ -47,19 +48,20 @@ app.delete("/api/foods/:id", (req, res) => {
   res.json({ message: "O'chirildi" });
 });
 
-// --- BUYURTMALAR VA ARXIV (STATISTIKA UCHUN) ---
-
+// --- 2. BUYURTMALAR VA STATISTIKA ---
 app.get("/api/orders", (req, res) => res.json(readDB().orders));
 
-// Arxivlash API: "Yakunlash" bosilganda o'chirmaydi, arxivga ko'chiradi
+// Arxivlash: O'chirib yubormasdan 'archive' bo'limiga ko'chiradi
 app.post("/api/orders/archive/:id", (req, res) => {
   const db = readDB();
-  const orderIdx = db.orders.findIndex((o) => o.id === req.params.id);
+  const orderIdx = db.orders.findIndex(
+    (o) => o.id === req.params.id || o._id === req.params.id,
+  );
 
   if (orderIdx !== -1) {
     const archivedOrder = { ...db.orders[orderIdx], status: "Yakunlandi" };
     if (!db.archive) db.archive = [];
-    db.archive.push(archivedOrder); // Statistika uchun saqlab qolamiz
+    db.archive.push(archivedOrder);
     db.orders.splice(orderIdx, 1);
     writeDB(db);
     res.json({ message: "Zakas arxivlandi" });
@@ -68,10 +70,10 @@ app.post("/api/orders/archive/:id", (req, res) => {
   }
 });
 
-// Statistika uchun hamma ma'lumotni olish
+// STATISTIKA: Arxiv + Faol buyurtmalar jamlamasi
 app.get("/api/stats/summary", (req, res) => {
   const db = readDB();
-  const history = [...(db.archive || []), ...db.orders]; // O'chib ketmagan hamma pulni hisoblash
+  const history = [...(db.archive || []), ...db.orders];
   res.json(history);
 });
 
