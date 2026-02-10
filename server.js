@@ -9,26 +9,28 @@ const DB_FILE = "./db.json";
 app.use(cors());
 app.use(bodyParser.json({ limit: "50mb" }));
 
-// Ma'lumotlarni o'qish/yozish funksiyalari
+// --- 1. FAYLDAN O'QISH VA YOZISH ---
 const readDB = () => {
   if (!fs.existsSync(DB_FILE)) {
-    const initialData = {
-      foods: [],
-      orders: [],
-      archive: [],
-      settings: { bgColor: "#f3f4f6" },
-    };
+    const initialData = { foods: [], orders: [] };
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
     return initialData;
   }
-  return JSON.parse(fs.readFileSync(DB_FILE));
+  const data = fs.readFileSync(DB_FILE);
+  return JSON.parse(data);
 };
 
-const writeDB = (data) =>
+const writeDB = (data) => {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+};
 
-// --- 1. MAHSULOTLAR API ---
-app.get("/api/foods", (req, res) => res.json(readDB().foods));
+// --- 2. API YO'NALISHLARI ---
+
+app.get("/api/foods", (req, res) => {
+  const db = readDB();
+  res.json(db.foods);
+});
+
 app.post("/api/foods", (req, res) => {
   const db = readDB();
   const newFood = {
@@ -36,11 +38,16 @@ app.post("/api/foods", (req, res) => {
     id: req.body.id || Date.now().toString(),
     price: Number(req.body.price),
   };
-  const idx = db.foods.findIndex((f) => f.id === newFood.id);
-  idx !== -1 ? (db.foods[idx] = newFood) : db.foods.push(newFood);
+  const index = db.foods.findIndex((f) => f.id === newFood.id);
+  if (index !== -1) {
+    db.foods[index] = newFood;
+  } else {
+    db.foods.push(newFood);
+  }
   writeDB(db);
   res.status(201).json(newFood);
 });
+
 app.delete("/api/foods/:id", (req, res) => {
   const db = readDB();
   db.foods = db.foods.filter((f) => f.id !== req.params.id);
@@ -48,36 +55,66 @@ app.delete("/api/foods/:id", (req, res) => {
   res.json({ message: "O'chirildi" });
 });
 
-// --- 2. BUYURTMALAR VA STATISTIKA ---
-app.get("/api/orders", (req, res) => res.json(readDB().orders));
-
-// Arxivlash: O'chirib yubormasdan 'archive' bo'limiga ko'chiradi
-app.post("/api/orders/archive/:id", (req, res) => {
+app.get("/api/orders", (req, res) => {
   const db = readDB();
-  const orderIdx = db.orders.findIndex(
-    (o) => o.id === req.params.id || o._id === req.params.id,
-  );
-
-  if (orderIdx !== -1) {
-    const archivedOrder = { ...db.orders[orderIdx], status: "Yakunlandi" };
-    if (!db.archive) db.archive = [];
-    db.archive.push(archivedOrder);
-    db.orders.splice(orderIdx, 1);
-    writeDB(db);
-    res.json({ message: "Zakas arxivlandi" });
-  } else {
-    res.status(404).json({ message: "Topilmadi" });
-  }
+  res.json(db.orders);
 });
 
-// STATISTIKA: Arxiv + Faol buyurtmalar jamlamasi
-app.get("/api/stats/summary", (req, res) => {
+app.post("/api/orders", (req, res) => {
   const db = readDB();
-  const history = [...(db.archive || []), ...db.orders];
-  res.json(history);
+  const newOrder = {
+    ...req.body,
+    id: "ORD-" + Math.floor(1000 + Math.random() * 9000),
+    status: "Kutilmoqda", // Default holat
+    date: new Date().toLocaleString("uz-UZ"),
+  };
+  db.orders.push(newOrder);
+  writeDB(db);
+  res.status(201).json(newOrder);
+});
+
+// --- MANA SHU QISMI QO'SHILDI (STATUS YANGILASH) ---
+app.patch("/api/orders/:id", (req, res) => {
+  const db = readDB();
+  const { id } = req.params;
+  const { status } = req.body;
+
+  const orderIndex = db.orders.findIndex((o) => o.id === id);
+
+  if (orderIndex !== -1) {
+    // Faqat statusni yangilaymiz
+    db.orders[orderIndex].status = status;
+    writeDB(db);
+    console.log(`✅ Buyurtma ${id} statusi ${status}ga o'zgardi`);
+    res.json(db.orders[orderIndex]);
+  } else {
+    res.status(404).json({ message: "Zakas topilmadi" });
+  }
+});
+// ------------------------------------------------
+
+app.delete("/api/orders/:id", (req, res) => {
+  const db = readDB();
+  db.orders = db.orders.filter((o) => o.id !== req.params.id);
+  writeDB(db);
+  res.json({ message: "Zakas bajarildi" });
 });
 
 const PORT = 5000;
-app.listen(PORT, () =>
-  console.log(`🚀 Server http://localhost:${PORT} da ishga tushdi`),
-);
+app.listen(PORT, () => {
+  console.log(`🚀 Server http://localhost:${PORT} da yoniq`);
+});
+// --- RANGNI OLISH ---
+app.get('/api/settings', (req, res) => {
+    const db = readDB();
+    // Agar settings bo'lmasa, default rang qaytaramiz
+    res.json(db.settings || { bgColor: "#f3f4f6" });
+});
+
+// --- RANGNI SAQLASH ---
+app.post('/api/settings', (req, res) => {
+    const db = readDB();
+    db.settings = { ...db.settings, ...req.body };
+    writeDB(db);
+    res.json({ message: "Sozlamalar saqlandi", settings: db.settings });
+});
